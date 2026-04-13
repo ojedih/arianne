@@ -1,0 +1,241 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Tenancy ──────────────────────────────────────────────────────────────────
+
+model Business {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  handle  String @unique // URL-safe slug e.g. "polar-detail"
+
+  name    String
+  email   String @unique
+  phone   String
+  address String
+  city    String
+  state   String
+  zip     String
+
+  taxRate  Float  @default(0.0875)
+  currency String @default("USD")
+
+  // Branding
+  logoPath     String @default("/logo.png")
+  accentColor  String @default("#a16854")
+  borderRadius String @default("none")
+
+  // Booking settings
+  defaultState            String @default("CA")
+  cancellationPolicyHours Int    @default(24)
+
+  // Availability: JSON matching { slotDurationMinutes, bufferBetweenBookingsMinutes,
+  //   maxBookingsPerSlot, blackoutDates, schedule: { monday..sunday } }
+  availability Json @default("{}")
+
+  users        BusinessUser[]
+  appointments Appointment[]
+  serviceTypes ServiceType[]
+  customers    Customer[]
+}
+
+model BusinessUser {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  name         String
+  email        String
+  passwordHash String
+  role         BusinessUserRole @default(STAFF)
+
+  @@unique([businessId, email])
+  @@index([businessId])
+}
+
+enum BusinessUserRole {
+  OWNER
+  STAFF
+}
+
+// ─── Services ─────────────────────────────────────────────────────────────────
+
+model ServiceType {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  name  String // e.g. "Exterior"
+  slug  String // e.g. "exterior"
+  order Int    @default(0)
+
+  packages ServicePackage[]
+
+  @@unique([businessId, slug])
+  @@index([businessId])
+}
+
+model ServicePackage {
+  id            String      @id @default(cuid())
+  serviceTypeId String
+  serviceType   ServiceType @relation(fields: [serviceTypeId], references: [id], onDelete: Cascade)
+
+  name             String
+  shortDescription String
+  fullDescription  String
+  images           String[]
+  basePriceCents   Int
+  durationMinutes  Int
+  displayOrder     Int     @default(0)
+  isActive         Boolean @default(true)
+
+  items               ServicePackageItem[]
+  appointmentServices AppointmentService[]
+}
+
+// A unit of labor — e.g. "Clean wheels", "Vacuum interior".
+// Items can be reused across multiple packages.
+model ServiceItem {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+
+  packages ServicePackageItem[]
+}
+
+// Join table: which items belong to which package, and how.
+// isBundled=true  → included in the package price (customer sees it as part of the service)
+// isBundled=false → available as an addon; addonPriceCents sets its standalone price
+model ServicePackageItem {
+  id        String         @id @default(cuid())
+  packageId String
+  package   ServicePackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  itemId    String
+  item      ServiceItem    @relation(fields: [itemId], references: [id])
+
+  isBundled       Boolean @default(true)
+  addonPriceCents Int?    // only relevant when isBundled=false
+
+  @@unique([packageId, itemId])
+  @@index([packageId])
+}
+
+// ─── Customers ────────────────────────────────────────────────────────────────
+
+model Customer {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  email     String
+  firstName String
+  lastName  String
+  phone     String
+
+  vehicles     CustomerVehicle[]
+  appointments Appointment[]
+
+  @@unique([businessId, email])
+  @@index([businessId])
+}
+
+model CustomerVehicle {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  year  String
+  make  String
+  model String
+
+  @@index([customerId])
+}
+
+// ─── Appointments ─────────────────────────────────────────────────────────────
+
+model Appointment {
+  id         String    @id @default(cuid())
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  businessId String
+  business   Business  @relation(fields: [businessId], references: [id])
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+
+  status AppointmentStatus @default(PENDING)
+
+  scheduledAt     DateTime
+  durationMinutes Int
+
+  // Time tracking (set by portal when work actually begins/ends)
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  // Vehicle snapshot — denormalized so history is preserved if customer edits their vehicle
+  vehicleYear  String
+  vehicleMake  String
+  vehicleModel String
+
+  // Customer snapshot — same reasoning
+  customerFirstName String
+  customerLastName  String
+  customerPhone     String
+  customerEmail     String
+  customerAddress   String
+  customerCity      String  @default("")
+  customerState     String  @default("")
+  customerZip       String  @default("")
+  customerNotes     String?
+  cancelToken       String  @unique @default(cuid())
+
+  subtotalCents Int
+  taxCents      Int
+  totalCents    Int
+
+  services AppointmentService[]
+  addons   AppointmentAddon[]
+
+  @@index([businessId, scheduledAt])
+  @@index([scheduledAt])
+  @@index([customerId])
+}
+
+model AppointmentService {
+  id            String          @id @default(cuid())
+  appointment   Appointment     @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  appointmentId String
+  packageId     String?
+  package       ServicePackage? @relation(fields: [packageId], references: [id])
+  serviceId     String
+  serviceName   String
+  priceCents    Int
+}
+
+model AppointmentAddon {
+  id            String      @id @default(cuid())
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  appointmentId String
+  addonId       String
+  addonName     String
+  priceCents    Int
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
