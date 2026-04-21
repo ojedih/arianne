@@ -58,12 +58,23 @@ export interface AvailabilityConfig {
   blackoutDates: string[]; // ISO date strings "2026-12-25"
 }
 
+// ─── Vehicle body class ───────────────────────────────────────────────────────
+
+export type VehicleBodyClass =
+  | "COUPE"
+  | "SEDAN"
+  | "SUV"
+  | "LARGE_SUV"
+  | "PICKUP_TRUCK"
+  | "VAN";
+
 // ─── Booking session state ────────────────────────────────────────────────────
 
 export interface VehicleInfo {
   year: string;
   make: string;
   model: string;
+  bodyClass?: VehicleBodyClass;
 }
 
 export interface CustomerInfo {

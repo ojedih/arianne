@@ -1,4 +1,14 @@
 import { z } from "zod";
+import type { VehicleBodyClass } from "@/types";
+
+const VEHICLE_BODY_CLASSES: [VehicleBodyClass, ...VehicleBodyClass[]] = [
+  "COUPE",
+  "SEDAN",
+  "SUV",
+  "LARGE_SUV",
+  "PICKUP_TRUCK",
+  "VAN",
+];
 
 // ─── Config schemas ───────────────────────────────────────────────────────────
 
@@ -73,6 +83,7 @@ export const VehicleInfoSchema = z.object({
     ),
   make: z.string().min(1, "Make is required").max(50),
   model: z.string().min(1, "Model is required").max(50),
+  bodyClass: z.enum(VEHICLE_BODY_CLASSES).optional(),
 });
 
 export const CustomerInfoSchema = z.object({

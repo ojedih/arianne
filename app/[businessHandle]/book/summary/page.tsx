@@ -6,13 +6,14 @@ import { StepTitle } from "@/components/booking/StepTitle";
 import { NavButtons } from "@/components/booking/NavButtons";
 import { PriceSummary } from "@/components/booking/PriceSummary";
 import { useBookingContext } from "../BookingProvider";
-import { formatCents } from "@/lib/pricing";
+import { formatCents, resolvePackagePrice } from "@/lib/pricing";
 
 export default function SummaryPage() {
   const router = useRouter();
   const { businessHandle } = useParams() as { businessHandle: string };
   const { packages, business } = useBookingContext();
   const {
+    vehicle,
     selectedExteriorServiceIds,
     selectedInteriorServiceIds,
     selectedAddonIds,
@@ -33,15 +34,17 @@ export default function SummaryPage() {
     pkg.addonItems.filter((item) => selectedAddonIds.includes(item.packageItemId))
   );
 
+  const bodyClass = vehicle?.bodyClass;
+
   const subtotalCents =
-    selectedPackages.reduce((sum, p) => sum + p.basePriceCents, 0) +
+    selectedPackages.reduce((sum, p) => sum + resolvePackagePrice(p, bodyClass), 0) +
     selectedAddonItems.reduce((sum, a) => sum + a.addonPriceCents, 0);
   const taxCents = Math.round(subtotalCents * business.taxRate);
   const totalCents = subtotalCents + taxCents;
 
   const breakdown = {
     lineItems: [
-      ...selectedPackages.map((p) => ({ label: p.name, priceCents: p.basePriceCents })),
+      ...selectedPackages.map((p) => ({ label: p.name, priceCents: resolvePackagePrice(p, bodyClass) })),
       ...selectedAddonItems.map((a) => ({ label: a.name, priceCents: a.addonPriceCents })),
     ],
     subtotalCents,
@@ -75,7 +78,7 @@ export default function SummaryPage() {
                   {p.name}
                 </span>
                 <EditLink href={`/${businessHandle}/book/exterior`} handle={businessHandle}>
-                  {formatCents(p.basePriceCents)}
+                  {formatCents(resolvePackagePrice(p, bodyClass))}
                 </EditLink>
               </div>
             ))}

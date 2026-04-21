@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { prisma } from "./prisma";
+import type { VehicleBodyClass } from "@/types";
 
 export type BookingPackage = {
   id: string;
@@ -16,6 +17,11 @@ export type BookingPackage = {
     name: string;
     description: string | null;
     addonPriceCents: number;
+  }[];
+  bodyClassPrices: {
+    bodyClass: VehicleBodyClass;
+    priceCents: number;
+    durationMinutes: number | null;
   }[];
 };
 
@@ -55,6 +61,7 @@ export const getBookingData = cache(
                 items: {
                   include: { item: true },
                 },
+                bodyClassPrices: true,
               },
             },
           },
@@ -83,6 +90,11 @@ export const getBookingData = cache(
             description: pi.item.description ?? null,
             addonPriceCents: pi.addonPriceCents!,
           })),
+        bodyClassPrices: pkg.bodyClassPrices.map((bcp) => ({
+          bodyClass: bcp.bodyClass as VehicleBodyClass,
+          priceCents: bcp.priceCents,
+          durationMinutes: bcp.durationMinutes ?? null,
+        })),
       }))
     );
 

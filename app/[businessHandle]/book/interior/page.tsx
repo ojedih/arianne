@@ -6,6 +6,7 @@ import { useBookingStore } from "@/store/bookingStore";
 import { ServiceCard } from "@/components/booking/ServiceCard";
 import { StepTitle } from "@/components/booking/StepTitle";
 import { useBookingContext } from "../BookingProvider";
+import { resolvePackagePrice, resolvePackageDuration } from "@/lib/pricing";
 import type { ServiceConfig } from "@/types";
 
 export default function InteriorPage() {
@@ -13,6 +14,7 @@ export default function InteriorPage() {
   const { businessHandle } = useParams() as { businessHandle: string };
   const { packages } = useBookingContext();
   const {
+    vehicle,
     selectedExteriorServiceIds,
     selectedInteriorServiceIds,
     skippedExterior,
@@ -34,8 +36,8 @@ export default function InteriorPage() {
       shortDescription: p.shortDescription,
       fullDescription: p.fullDescription,
       images: p.images,
-      basePrice: p.basePriceCents,
-      durationMinutes: p.durationMinutes,
+      basePrice: resolvePackagePrice(p, vehicle?.bodyClass),
+      durationMinutes: resolvePackageDuration(p, vehicle?.bodyClass),
       displayOrder: p.displayOrder,
     }));
 

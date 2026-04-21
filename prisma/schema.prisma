@@ -40,10 +40,11 @@ model Business {
   //   maxBookingsPerSlot, blackoutDates, schedule: { monday..sunday } }
   availability Json @default("{}")
 
-  users        BusinessUser[]
-  appointments Appointment[]
-  serviceTypes ServiceType[]
-  customers    Customer[]
+  users            BusinessUser[]
+  appointments     Appointment[]
+  serviceTypes     ServiceType[]
+  customers        Customer[]
+  bodyClassRules   VehicleBodyClassRule[]
 }
 
 model BusinessUser {
@@ -64,6 +65,15 @@ model BusinessUser {
 enum BusinessUserRole {
   OWNER
   STAFF
+}
+
+enum VehicleBodyClass {
+  COUPE
+  SEDAN
+  SUV
+  LARGE_SUV
+  PICKUP_TRUCK
+  VAN
 }
 
 // ─── Services ─────────────────────────────────────────────────────────────────
@@ -99,6 +109,19 @@ model ServicePackage {
 
   items               ServicePackageItem[]
   appointmentServices AppointmentService[]
+  bodyClassPrices     ServicePackageBodyClassPrice[]
+}
+
+model ServicePackageBodyClassPrice {
+  id              String           @id @default(cuid())
+  packageId       String
+  package         ServicePackage   @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  bodyClass       VehicleBodyClass
+  priceCents      Int
+  durationMinutes Int?
+
+  @@unique([packageId, bodyClass])
+  @@index([packageId])
 }
 
 // A unit of labor — e.g. "Clean wheels", "Vacuum interior".
@@ -155,9 +178,10 @@ model CustomerVehicle {
   customerId String
   customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
-  year  String
-  make  String
-  model String
+  year      String
+  make      String
+  model     String
+  bodyClass VehicleBodyClass?
 
   @@index([customerId])
 }
@@ -183,9 +207,10 @@ model Appointment {
   completedAt DateTime?
 
   // Vehicle snapshot — denormalized so history is preserved if customer edits their vehicle
-  vehicleYear  String
-  vehicleMake  String
-  vehicleModel String
+  vehicleYear      String
+  vehicleMake      String
+  vehicleModel     String
+  vehicleBodyClass VehicleBodyClass?
 
   // Customer snapshot — same reasoning
   customerFirstName String
@@ -229,6 +254,19 @@ model AppointmentAddon {
   addonId       String
   addonName     String
   priceCents    Int
+}
+
+model VehicleBodyClassRule {
+  id         String           @id @default(cuid())
+  createdAt  DateTime         @default(now())
+  businessId String
+  business   Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  make       String
+  model      String
+  bodyClass  VehicleBodyClass
+
+  @@unique([businessId, make, model])
+  @@index([businessId])
 }
 
 enum AppointmentStatus {

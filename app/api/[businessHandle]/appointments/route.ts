@@ -2,15 +2,19 @@ import { after } from "next/server";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@/app/generated/prisma/client";
+import { Prisma, VehicleBodyClass } from "@/app/generated/prisma/client";
 import { sendBookingConfirmation } from "@/lib/email";
-import type { BookingConfirmation } from "@/types";
+import { resolvePackagePrice, resolvePackageDuration } from "@/lib/pricing";
+import type { BookingConfirmation, VehicleBodyClass as VehicleBodyClassType } from "@/types";
+
+const VEHICLE_BODY_CLASSES = ["COUPE", "SEDAN", "SUV", "LARGE_SUV", "PICKUP_TRUCK", "VAN"] as const;
 
 const BookingSchema = z.object({
   vehicle: z.object({
     year: z.string().min(4).max(4),
     make: z.string().min(1),
     model: z.string().min(1),
+    bodyClass: z.enum(VEHICLE_BODY_CLASSES).optional(),
   }),
   selectedPackageIds: z.array(z.string()).min(1),
   selectedAddonPackageItemIds: z.array(z.string()).default([]),
@@ -67,7 +71,13 @@ export async function POST(
       id: { in: selectedPackageIds },
       serviceType: { businessId: business.id },
     },
-    select: { id: true, name: true, basePriceCents: true, durationMinutes: true },
+    select: {
+      id: true,
+      name: true,
+      basePriceCents: true,
+      durationMinutes: true,
+      bodyClassPrices: { select: { bodyClass: true, priceCents: true, durationMinutes: true } },
+    },
   });
 
   if (packages.length === 0) {
@@ -86,12 +96,22 @@ export async function POST(
       })
     : [];
 
-  const packageSubtotal = packages.reduce((sum, p) => sum + p.basePriceCents, 0);
+  const bodyClass = vehicle.bodyClass as VehicleBodyClassType | undefined;
+  const packageSubtotal = packages.reduce(
+    (sum, p) => sum + resolvePackagePrice({ basePriceCents: p.basePriceCents, bodyClassPrices: p.bodyClassPrices as { bodyClass: VehicleBodyClassType; priceCents: number }[] }, bodyClass),
+    0
+  );
   const addonSubtotal = addonItems.reduce((sum, a) => sum + (a.addonPriceCents ?? 0), 0);
   const subtotalCents = packageSubtotal + addonSubtotal;
   const taxCents = Math.round(subtotalCents * business.taxRate);
   const totalCents = subtotalCents + taxCents;
-  const totalDurationMinutes = packages.reduce((sum, p) => sum + p.durationMinutes, 0);
+  const totalDurationMinutes = packages.reduce(
+    (sum, p) => sum + resolvePackageDuration(
+      { durationMinutes: p.durationMinutes, bodyClassPrices: p.bodyClassPrices as { bodyClass: VehicleBodyClassType; priceCents: number; durationMinutes: number | null }[] },
+      bodyClass
+    ),
+    0
+  );
 
   const slotDate = new Date(scheduledAt);
 
@@ -144,6 +164,7 @@ export async function POST(
             year: vehicle.year,
             make: vehicle.make,
             model: vehicle.model,
+            bodyClass: vehicle.bodyClass ? (vehicle.bodyClass as VehicleBodyClass) : null,
           },
         });
       }
@@ -157,6 +178,7 @@ export async function POST(
           vehicleYear: vehicle.year,
           vehicleMake: vehicle.make,
           vehicleModel: vehicle.model,
+          vehicleBodyClass: vehicle.bodyClass ? (vehicle.bodyClass as VehicleBodyClass) : null,
           customerFirstName: customer.firstName,
           customerLastName: customer.lastName,
           customerPhone: customer.phone,
@@ -174,7 +196,10 @@ export async function POST(
               packageId: p.id,
               serviceId: p.id,
               serviceName: p.name,
-              priceCents: p.basePriceCents,
+              priceCents: resolvePackagePrice(
+                { basePriceCents: p.basePriceCents, bodyClassPrices: p.bodyClassPrices as { bodyClass: VehicleBodyClassType; priceCents: number }[] },
+                bodyClass
+              ),
             })),
           },
           addons: {

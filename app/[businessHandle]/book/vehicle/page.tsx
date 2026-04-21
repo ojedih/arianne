@@ -8,7 +8,7 @@ import { Car } from "lucide-react";
 import { useBookingStore } from "@/store/bookingStore";
 import { VehicleInfoSchema } from "@/lib/validations";
 import { filterMakes } from "@/lib/vehicleMakes";
-import type { VehicleInfo } from "@/types";
+import type { VehicleInfo, VehicleBodyClass } from "@/types";
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -21,6 +21,7 @@ export default function VehiclePage() {
   const router = useRouter();
   const { businessHandle } = useParams() as { businessHandle: string };
   const { vehicle, setVehicle, setNavigationDirection } = useBookingStore();
+  const [submitting, setSubmitting] = useState(false);
 
   const {
     register,
@@ -138,10 +139,27 @@ export default function VehiclePage() {
       )
     : modelSuggestions;
 
-  function onSubmit(data: VehicleInfo) {
-    setVehicle(data);
+  async function onSubmit(data: VehicleInfo) {
+    setSubmitting(true);
+    let bodyClass: VehicleBodyClass | undefined;
+    try {
+      const res = await fetch(
+        `/api/vehicle-body-class?handle=${encodeURIComponent(businessHandle)}&make=${encodeURIComponent(data.make)}&model=${encodeURIComponent(data.model)}`
+      );
+      if (res.ok) {
+        const json = await res.json();
+        bodyClass = json.bodyClass ?? undefined;
+      }
+    } catch {
+      // silent — proceed without body class, base price will be used
+    }
+    setVehicle({ ...data, bodyClass });
     setNavigationDirection("forward");
-    router.push(`/${businessHandle}/book/exterior`);
+    router.push(
+      bodyClass
+        ? `/${businessHandle}/book/exterior`
+        : `/${businessHandle}/book/vehicle-type`
+    );
   }
 
   const { ref: makeRhfRef, ...makeRegisterRest } = register("make");
@@ -287,13 +305,14 @@ export default function VehiclePage() {
         <div className="pt-2">
           <button
             type="submit"
-            className="w-full h-12 text-white font-semibold text-base active:scale-[0.98] transition-all"
+            disabled={submitting}
+            className="w-full h-12 text-white font-semibold text-base active:scale-[0.98] transition-all disabled:opacity-70"
             style={{
               backgroundColor: "var(--accent, #2563eb)",
               borderRadius: "var(--ui-radius-lg, 1rem)",
             }}
           >
-            Let&apos;s pick your services
+            {submitting ? "Checking vehicle…" : "Let’s pick your services"}
           </button>
         </div>
       </form>
